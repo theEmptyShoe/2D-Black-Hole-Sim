@@ -1,0 +1,26 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Run OpenGL App",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/app.exe",
+            "cwd": "${workspaceFolder}",
+            "MIMode": "gdb",
+            "preLaunchTask": "Build OpenGL",
+            "stopAtEntry": false
+        },
+        {
+            "name": "Debug Chess Engine",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/app_debug.exe",
+            "cwd": "${workspaceFolder}",
+            "MIMode": "gdb",
+            "miDebuggerPath": "C:/msys64/ucrt64/bin/gdb.exe",
+            "preLaunchTask": "Build Debug",
+            "stopAtEntry": false
+        }
+    ]
+}
