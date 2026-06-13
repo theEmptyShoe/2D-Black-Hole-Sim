@@ -64,12 +64,6 @@ struct Vec {
     }
 };
 
-struct State {
-    float r;
-    float phi;
-    float v_r;
-};
-
 struct RayTrailObj {
     float x;
     float y;
@@ -99,10 +93,24 @@ struct BlackHole {
     BlackHole(float x, float y, float mass, float r_s) : pos(x, y), mass(mass), r_s(r_s) {}
 };
 
-struct Ray {
+struct State {
     float r;  // Dist. to black hole
     float phi;  // Angle to black hole
     float v_r;  // Radial velocity
+};
+
+State derivatives_of(State& state, float L, float M) {
+    State dervs;
+    dervs.r = state.v_r;
+    dervs.phi = L / pow(state.r, 2);  // Angular velocity
+
+    // Here v_r is dr/dλ tangentially. [NOTE: dλ is minute step of light (not time-step)]
+    dervs.v_r = pow(L, 2) / pow(state.r, 3) - (3.0f * M * pow(L, 2)) / pow(state.r, 4);  // Tangential acceleration
+    return dervs;
+}
+
+struct Ray {
+    State state;
     float L;  // Angular momentum (conserved)
 
     std::vector<RayTrailObj> trail;
@@ -143,16 +151,16 @@ struct Ray {
 
     Ray(float x, float y, float angle, BlackHole& blackHole) {
         Vec rel = Vec(x, y) - blackHole.pos;
-        r = rel.get_length();
-        phi = atan2(rel.y, rel.x);
+        state.r = rel.get_length();
+        state.phi = atan2(rel.y, rel.x);
         trail.emplace_back(Vec(x, y));
 
-        Vec e_r = Vec(cos(phi), sin(phi));  // Points away from black hole
-        Vec e_phi = Vec(-sin(phi), cos(phi));  // Points tangentially
+        Vec e_r = Vec(cos(state.phi), sin(state.phi));  // Points away from black hole
+        Vec e_phi = Vec(-sin(state.phi), cos(state.phi));  // Points tangentially
         Vec v0 = Vec(cos(angle), sin(angle)) * C;  // Initial velocity
-        v_r = v0.x * e_r.x + v0.y * e_r.y;  // Tangential velocity
+        state.v_r = v0.x * e_r.x + v0.y * e_r.y;  // Tangential velocity
         float v_phi = v0.x * e_phi.x + v0.y * e_phi.y;  // Angular velocity
-        L = r * v_phi;
+        L = state.r * v_phi;
 
         glGenVertexArrays(1, &vao);
         glGenBuffers(1, &vbo);
@@ -160,6 +168,7 @@ struct Ray {
 
     void move(float dt, BlackHole& blackHole) {
         /*
+        // Newtonian mechanics
         const Vec diff = blackHole.pos - pos;
         const float r = diff.get_length();
 
@@ -179,21 +188,18 @@ struct Ray {
 
         pos += vel * dt;
         */
-        if (r <= blackHole.r_s) return;  // Beyond event horizon, absorbed
+        if (state.r <= blackHole.r_s) return;  // Beyond event horizon, absorbed
         float M = blackHole.r_s * 0.5f;  // Mass of black hole
-
-        // Here v_r is dr/dλ tangentially. [NOTE: dλ is minute step of light (not time-step)]
-        float dphi = L / (r * r);  // Angular velocity
-        float dv_r = (L * L) / (r * r * r) - (3.0f * M * L * L) / (r * r * r * r);  // Tangential acceleration
+        State derivs = derivatives_of(state, L, M);
 
         // Euler integration
-        r += v_r * dt;
-        phi += dphi * dt;
-        v_r += dv_r * dt;
+        state.r += derivs.r * dt;
+        state.phi += derivs.phi * dt;
+        state.v_r += derivs.v_r * dt;
     }
 
     void update(float dt, BlackHole& blackHole) {
-        trail.emplace_back(blackHole.pos + Vec(cos(phi), sin(phi)) * r);
+        trail.emplace_back(blackHole.pos + Vec(cos(state.phi), sin(state.phi)) * state.r);
 
         for (RayTrailObj& rayTrailObj: trail) {
             rayTrailObj.update(dt);
@@ -254,7 +260,7 @@ struct Beam {
 
     void move(float dt, BlackHole& blackHole) {
         for (Ray& ray: rays) {
-            if (ray.r > blackHole.r_s) {
+            if (ray.state.r > blackHole.r_s) {
                 ray.move(dt, blackHole);
             }
         }
