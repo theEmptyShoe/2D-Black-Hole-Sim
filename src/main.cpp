@@ -64,6 +64,12 @@ struct Vec {
     }
 };
 
+struct State {
+    float r;
+    float phi;
+    float v_r;
+};
+
 struct RayTrailObj {
     float x;
     float y;
@@ -94,10 +100,10 @@ struct BlackHole {
 };
 
 struct Ray {
-    float r;
-    float phi;
-    float v_r;
-    float L;
+    float r;  // Dist. to black hole
+    float phi;  // Angle to black hole
+    float v_r;  // Radial velocity
+    float L;  // Angular momentum (conserved)
 
     std::vector<RayTrailObj> trail;
     GLuint vao;  // Vertex Array Object
@@ -141,11 +147,11 @@ struct Ray {
         phi = atan2(rel.y, rel.x);
         trail.emplace_back(Vec(x, y));
 
-        Vec er = Vec(cos(phi), sin(phi));
-        Vec ephi = Vec(-sin(phi), cos(phi));
-        Vec v0 = Vec(cos(angle), sin(angle)) * C;
-        v_r = v0.x * er.x + v0.y * er.y;
-        float v_phi = v0.x * ephi.x + v0.y * ephi.y;
+        Vec e_r = Vec(cos(phi), sin(phi));  // Points away from black hole
+        Vec e_phi = Vec(-sin(phi), cos(phi));  // Points tangentially
+        Vec v0 = Vec(cos(angle), sin(angle)) * C;  // Initial velocity
+        v_r = v0.x * e_r.x + v0.y * e_r.y;  // Tangential velocity
+        float v_phi = v0.x * e_phi.x + v0.y * e_phi.y;  // Angular velocity
         L = r * v_phi;
 
         glGenVertexArrays(1, &vao);
@@ -173,15 +179,15 @@ struct Ray {
 
         pos += vel * dt;
         */
-        if (r <= blackHole.r_s) return;
+        if (r <= blackHole.r_s) return;  // Beyond event horizon, absorbed
+        float M = blackHole.r_s * 0.5f;  // Mass of black hole
 
-        float M = blackHole.r_s * 0.5f;
+        // Here v_r is dr/dλ tangentially. [NOTE: dλ is minute step of light (not time-step)]
+        float dphi = L / (r * r);  // Angular velocity
+        float dv_r = (L * L) / (r * r * r) - (3.0f * M * L * L) / (r * r * r * r);  // Tangential acceleration
 
-        float dr   = v_r;
-        float dphi = L / (r * r);
-        float dv_r = (L * L) / (r * r * r) - (3.0f * M * L * L) / (r * r * r * r);
-
-        r += dr * dt;
+        // Euler integration
+        r += v_r * dt;
         phi += dphi * dt;
         v_r += dv_r * dt;
     }
