@@ -3,9 +3,12 @@
 #include <algorithm>
 #include "myUI.h"
 
-constexpr float C = 50.0f;
+constexpr float C = 75.0f;
 constexpr float G = 4.0f;
 constexpr float PI = 3.14159265358979323846f;
+
+constexpr float SCREEN_WIDTH = 1200;
+constexpr float SCREEN_HEIGHT = 800;
 
 struct Vec {
     float x;
@@ -94,9 +97,53 @@ struct BlackHole {
 };
 
 struct State {
-    float r;  // Dist. to black hole
+    float r;  // Distance to black hole
     float phi;  // Angle to black hole
     float v_r;  // Radial velocity
+
+    State operator+(const State& other) const {
+        return {r + other.r, phi + other.phi, v_r + other.v_r};
+    }
+
+    State operator-(const State& other) const {
+        return {r - other.r, phi - other.phi, v_r - other.v_r};
+    }
+
+    State operator*(float c) const {
+        return {r * c, phi * c, v_r * c};
+    }
+
+    State operator/(float c) const {
+        return {r / c, phi / c, v_r / c};
+    }
+
+    State& operator+=(const State& other) {
+        r += other.r;
+        phi += other.phi;
+        v_r += other.v_r;
+        return *this;
+    }
+
+    State& operator-=(const State& other) {
+        r -= other.r;
+        phi -= other.phi;
+        v_r -= other.v_r;
+        return *this;
+    }
+
+    State& operator*=(float c) {
+        r *= c;
+        phi *= c;
+        v_r *= c;
+        return *this;
+    }
+
+    State& operator/=(float c) {
+        r /= c;
+        phi /= c;
+        v_r /= c;
+        return *this;
+    }
 };
 
 State derivatives_of(State& state, float L, float M) {
@@ -190,12 +237,25 @@ struct Ray {
         */
         if (state.r <= blackHole.r_s) return;  // Beyond event horizon, absorbed
         float M = blackHole.r_s * 0.5f;  // Mass of black hole
-        State derivs = derivatives_of(state, L, M);
 
+        // RK4
+        State temp;
+        const State k1 = derivatives_of(state, L, M);
+        temp = state + k1 * dt * 0.5;
+        const State k2 = derivatives_of(temp, L, M);
+        temp = state + k2 * dt * 0.5;
+        const State k3 = derivatives_of(temp, L, M);
+        temp = state + k3 * dt;
+        const State k4 = derivatives_of(temp, L, M);
+
+        const State avg_dervs = (k1 + k2 * 2 + k3 * 2 + k4) / 6;
+        state += avg_dervs * dt;
+        
+        /*
         // Euler integration
-        state.r += derivs.r * dt;
-        state.phi += derivs.phi * dt;
-        state.v_r += derivs.v_r * dt;
+        State derivs = derivatives_of(state, L, M);
+        state += derivs * dt;
+        */
     }
 
     void update(float dt, BlackHole& blackHole) {
@@ -317,17 +377,16 @@ Mesh getCircle(int x, int y, int radius, int resolution = 360) {
 int main() {
     if (myUI::init() != 0) return -1;
 
-    GLFWwindow* window = myUI::createWindow(1280, 720, "OpenGL");
+    GLFWwindow* window = myUI::createWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "OpenGL");
     if (!window) return -1;
 
     GLuint black_hole_shaders = myUI::createShaderProgram("shaders/black_hole/vertex.glsl", "shaders/black_hole/fragment.glsl");
     GLuint ray_shaders = myUI::createShaderProgram("shaders/ray/vertex.glsl", "shaders/ray/fragment.glsl");
 
-    BlackHole blackHole(640, 360, 25000.0f, 50.0f);
+    BlackHole blackHole(600, 400, 25000.0f, 35.0f);
+    Beam beam(Vec(100, 250), Vec(100, 550), -0.2f, 0.2f, 1500, blackHole);
     Mesh circleMesh = getCircle(blackHole.pos.x, blackHole.pos.y, blackHole.r_s);
     Mouse mouse;
-
-    Beam beam(Vec(100, 0), Vec(100, 720), -0.6f, 0.6f, 180, blackHole);
 
     float timer = 0;
     float lastTime = glfwGetTime();
@@ -356,14 +415,14 @@ int main() {
         glClear(GL_COLOR_BUFFER_BIT);
 
         glUseProgram(black_hole_shaders);
-        glUniform2f(glGetUniformLocation(black_hole_shaders, "screenSize"), 1280.0f, 720.0f);
+        glUniform2f(glGetUniformLocation(black_hole_shaders, "screenSize"), SCREEN_WIDTH, SCREEN_HEIGHT);
         glUniform3f(glGetUniformLocation(black_hole_shaders, "color"), 1.0f, 1.0f, 1.0f);
 
         glBindVertexArray(circleMesh.vao);
         glDrawArrays(GL_LINE_LOOP, 0, circleMesh.vertexCount);
 
         glUseProgram(ray_shaders);
-        glUniform2f(glGetUniformLocation(ray_shaders, "screenSize"), 1280.0f, 720.0f);
+        glUniform2f(glGetUniformLocation(ray_shaders, "screenSize"), SCREEN_WIDTH, SCREEN_HEIGHT);
         glUniform3f(glGetUniformLocation(ray_shaders, "color"), 1.0f, 1.0f, 1.0f);
 
         beam.update(dt, blackHole);
